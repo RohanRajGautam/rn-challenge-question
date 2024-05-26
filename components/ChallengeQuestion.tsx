@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react'
+import { debounce } from '@/utils/function'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
 	View,
 	TextInput,
@@ -18,45 +19,47 @@ interface ChallengeQuestionProps {
 }
 
 const ChallengeQuestion: React.FC<ChallengeQuestionProps> = ({ data }) => {
-	const [selectedItems, setSelectedItems] = useState<Item[]>([])
-	const [dataSource, setDataSource] = useState<Item[]>([])
+	const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set())
 	const [searchTerm, setSearchTerm] = useState<string>('')
 	const inputRef = useRef<TextInput>(null)
 
-	useEffect(() => {
-		setDataSource(data)
-	}, [data])
-
-	useEffect(() => {
-		const filteredData = data.filter((item) =>
+	// Memoize the filtered data based on search term
+	const dataSource = useMemo(() => {
+		return data.filter((item) =>
 			item.name.toLowerCase().includes(searchTerm.toLowerCase())
 		)
-		setDataSource(filteredData)
-	}, [searchTerm, data])
+	}, [data, searchTerm])
 
-	/**
-	 * The `handleSelect` function toggles the selection of an item in a list of selected items.
-	 * @param {Item} item - The `item` parameter in the `handleSelect` function represents an object of
-	 * type `Item`. This function is used to handle the selection of items in a list.
-	 */
-	const handleSelect = (item: Item) => {
+	// Handle item selection and deselection
+	const handleSelect = useCallback((item: Item) => {
 		setSelectedItems((currentSelectedItems) => {
-			if (currentSelectedItems.some((selected) => selected.id === item.id)) {
-				return currentSelectedItems.filter(
-					(selected) => selected.id !== item.id
-				)
+			const newSelectedItems = new Set(currentSelectedItems)
+			if (newSelectedItems.has(item.id)) {
+				newSelectedItems.delete(item.id)
+			} else {
+				newSelectedItems.add(item.id)
 			}
-			return [...currentSelectedItems, item]
+			return newSelectedItems
 		})
-	}
+	}, [])
 
-	const handleClear = () => {
+	// Clear the search input and reset the search term
+	const handleClear = useCallback(() => {
 		if (inputRef.current) {
 			inputRef.current.clear()
 		}
 		setSearchTerm('')
-		setDataSource(data)
-	}
+	}, [])
+
+	// Debounced version of setSearchTerm
+	const debouncedSetSearchTerm = useMemo(() => debounce(setSearchTerm, 300), [])
+
+	useEffect(() => {
+		return () => {
+			// Cleanup the debounce on unmount
+			debouncedSetSearchTerm.cancel && debouncedSetSearchTerm.cancel()
+		}
+	}, [debouncedSetSearchTerm])
 
 	return (
 		<View style={styles.container}>
@@ -84,14 +87,10 @@ const ChallengeQuestion: React.FC<ChallengeQuestionProps> = ({ data }) => {
 						<Text>{item.name}</Text>
 						<Text
 							style={{
-								color: selectedItems.some((selected) => selected.id === item.id)
-									? 'green'
-									: 'red',
+								color: selectedItems.has(item.id) ? 'green' : 'red',
 							}}
 						>
-							{selectedItems.some((selected) => selected.id === item.id)
-								? 'Selected'
-								: 'Not selected'}
+							{selectedItems.has(item.id) ? 'Selected' : 'Not selected'}
 						</Text>
 					</TouchableOpacity>
 				)}
